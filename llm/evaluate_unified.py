@@ -320,7 +320,7 @@ def _score_joint_action_single_step(env: UnifiedMultiBSCacheEnv, joint_actions: 
     next_reqs = env.requests[env.cur_epoch + 1]
     return _compute_instant_hit_rate(caches_after, next_reqs, env.user_bs_connections)
 
-# ======== 单步穷举（下一步即时命中率最大化） ========
+# ======== 解耦单步穷举（每个基站独立最大化下一步即时命中率） ========
 def choose_exhaustive_joint_action_single_step(env: UnifiedMultiBSCacheEnv) -> List[int]:
     if env.cur_epoch >= len(env.requests) - 1:
         return [0] * env.num_base_stations
@@ -330,35 +330,20 @@ def choose_exhaustive_joint_action_single_step(env: UnifiedMultiBSCacheEnv) -> L
     requests_next = env.requests[env.cur_epoch + 1]
     user_bs_conns = env.user_bs_connections
 
-    actions_per_bs: List[List[int]] = []
-    for bs in range(env.num_base_stations):
-        actions_per_bs.append(_enumerate_actions_for_bs(caches_before[bs], allowed_per_bs[bs], env.num_contents))
-
-    total_combos = 1
-    for a in actions_per_bs:
-        total_combos *= max(1, len(a))
-    if total_combos > MAX_JOINT_COMBOS_PER_STEP:
-        _logger.warning(f"[exhaustive1] 组合数 {total_combos} 超阈值，仍按单步穷举执行。")
-
     best_joint = [0] * env.num_base_stations
-    best_score = -1.0
-
-    if env.num_base_stations == 1:
-        for a0 in actions_per_bs[0]:
-            caches_after = [_apply_action_to_cache(caches_before[0], a0, env.num_contents)]
+    for bs in range(env.num_base_stations):
+        actions = _enumerate_actions_for_bs(caches_before[bs], allowed_per_bs[bs], env.num_contents)
+        best_score = -1.0
+        best_action = 0
+        for a in actions:
+            caches_after = [list(c) for c in caches_before]
+            caches_after[bs] = _apply_action_to_cache(caches_before[bs], a, env.num_contents)
             score = _compute_instant_hit_rate(caches_after, requests_next, user_bs_conns)
             if score > best_score:
-                best_score, best_joint = score, [a0]
-        return best_joint
-
-    for a0 in actions_per_bs[0]:
-        cache0_after = _apply_action_to_cache(caches_before[0], a0, env.num_contents)
-        for a1 in actions_per_bs[1]:
-            cache1_after = _apply_action_to_cache(caches_before[1], a1, env.num_contents)
-            score = _compute_instant_hit_rate([cache0_after, cache1_after], requests_next, user_bs_conns)
-            if score > best_score:
                 best_score = score
-                best_joint = [a0, a1]
+                best_action = a
+        best_joint[bs] = best_action
+
     return best_joint
 
 # ======== H步（当前步枚举 + 后续全 NoOp）穷举：贴现平均 ========
@@ -1120,11 +1105,11 @@ def main():
             ("lru", "LRU"),
             ("lfu", "LFU"),
             ("fifo", "FIFO"),
+            ("exhaustive", "单步穷举"),
         ]
         if NUM_BASE_STATIONS <= 2:
             strategies.extend(
                 [
-                    ("exhaustive", "单步穷举"),
                     ("five_step_tail_noop", "五步穷举(尾部NoOp,贴现)"),
                     ("three_step_tail_noop", "三步穷举(尾部NoOp,贴现)"),
                 ]
