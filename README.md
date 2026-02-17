@@ -1,158 +1,165 @@
 # Communication Master
 
-- **LLM 缓存策略学习**：SFT / GRPO / DAPO（基于 TRL + Unsloth）
+* **LLM Cache Policy Learning**: SFT / GRPO / DAPO (based on TRL + Unsloth)
 
-## 目录结构
+## Directory Structure
 
-- `cache_env/`：多基站缓存仿真环境 + prompt/动作格式工具  
-  - `unified_multi_bs_cache_env.py`：环境（状态、缓存、命中率、频率特征、step/reset 等）
-  - `unified_data_loader.py`：数据生成/加载（Zipf、多用户等）
-  - `prompt_utils.py`：把环境状态格式化为 LLM prompt（system/user messages）
-  - `history_rebuilder.py`：SFT “教师策略”（lookahead/穷举）与相关工具
-  - `action_validator.py`：严格解析/校验 LLM 输出动作格式（Replace/NoOp）
+* `cache_env/`: Multi-base-station caching simulation environment + prompt/action-format utilities
 
-- `llm/`：训练与评估入口脚本  
-  - `train_sft.py`：生成 SFT 数据（教师决策）并进行 LoRA SFT
-  - `train_grpo.py`：GRPO 训练（奖励基于缓存命中率/增益等）
-  - `train_dapo.py`：DAPO 训练（`GRPOConfig(loss_type="dapo")`）
-  - `evaluate_unified.py`：统一评估脚本（可选，含多种评估逻辑兜底导入）
+  * `unified_multi_bs_cache_env.py`: Environment (state, cache, hit rate, frequency features, step/reset, etc.)
+  * `unified_data_loader.py`: Data generation/loading (Zipf, multi-user, etc.)
+  * `prompt_utils.py`: Formats environment state into LLM prompts (system/user messages)
+  * `history_rebuilder.py`: SFT “teacher policy” (lookahead/exhaustive search) and related tools
+  * `action_validator.py`: Strictly parses/validates LLM action output format (Replace/NoOp)
 
-- `tools/`：辅助工具  
-  - `download_hf_model.py`：从 Hugging Face 下载模型快照到本地目录
-  - `merge_lora.py`：把 LoRA adapter 合并到 base model 并保存为 merged 模型
+* `llm/`: Training and evaluation entry scripts
 
-- `baselines/sac_baseline/`：SAC baseline（原仓库 README 保留在该目录）
+  * `train_sft.py`: Generate SFT data (teacher decisions) and run LoRA SFT
+  * `train_grpo.py`: GRPO training (rewards based on cache hit rate/gain, etc.)
+  * `train_dapo.py`: DAPO training (`GRPOConfig(loss_type="dapo")`)
+  * `evaluate_unified.py`: Unified evaluation script (optional; includes multiple evaluation logic fallbacks via defensive imports)
 
-## 环境安装
+* `tools/`: Helper tools
 
-建议：Linux + NVIDIA GPU（Unsloth / bitsandbytes / vLLM 多数情况下只在 Linux 上可用）。
+  * `download_hf_model.py`: Download Hugging Face model snapshots to a local directory
+  * `merge_lora.py`: Merge a LoRA adapter into the base model and save as a merged model
+
+* `baselines/sac_baseline/`: SAC baseline (original repo README preserved in this directory)
+
+## Environment Setup
+
+Recommended: Linux + NVIDIA GPU (Unsloth / bitsandbytes / vLLM are mostly only available on Linux in many cases).
 
 ```bash
 pip install -r requirements.txt
 ```
 
-说明：
-- `requirements.txt` 会包含 `requirements-llm.txt` + `requirements-sac.txt`。
-- `torch` 建议按你的 CUDA 版本用官方方式安装（不同平台/驱动差异较大）。
+Notes:
 
-## 依赖说明（核心库）
+* `requirements.txt` includes `requirements-llm.txt` + `requirements-sac.txt`.
+* For `torch`, it’s recommended to install via the official method based on your CUDA version (platform/driver differences can be significant).
 
-- `torch`：训练与推理计算
-- `transformers`：Tokenizer / 模型加载 / generation 配置
-- `trl`：`SFTTrainer`、`GRPOTrainer`、`GRPOConfig`
-- `unsloth`：加速 LoRA/SFT/GRPO 训练（可选但推荐）
-- `datasets`：训练数据集封装（`Dataset`）
-- `numpy` / `pandas`：环境与数据生成/处理
-- `tqdm`：进度条
-- `huggingface_hub`：`tools/download_hf_model.py` 下载模型
-- `tensorboard` / `wandb`：训练日志
-- `gym`：`baselines/sac_baseline` 环境接口
+## Dependencies (Core Libraries)
 
-## 下载模型
+* `torch`: Training and inference computation
+* `transformers`: Tokenizer / model loading / generation configuration
+* `trl`: `SFTTrainer`, `GRPOTrainer`, `GRPOConfig`
+* `unsloth`: Accelerated LoRA/SFT/GRPO training (optional but recommended)
+* `datasets`: Training dataset wrapper (`Dataset`)
+* `numpy` / `pandas`: Environment and data generation/processing
+* `tqdm`: Progress bar
+* `huggingface_hub`: Used by `tools/download_hf_model.py` to download models
+* `tensorboard` / `wandb`: Training logs
+* `gym`: Environment interface for `baselines/sac_baseline`
+
+## Download the Model
 
 ```bash
 python tools/download_hf_model.py --repo_id Qwen/Qwen2.5-7B-Instruct --out models/Qwen2.5-7B-Instruct
 ```
 
-## 推荐流程（LLM）
+## Recommended Workflow (LLM)
 
-1) 下载基座模型（或准备本地模型目录）  
-2) 运行 `llm/train_sft.py` 训练 LoRA（教师策略生成数据）  
-3) 用 `tools/merge_lora.py` 合并 LoRA 得到一个 merged 模型目录（可选，但 GRPO/DAPO 通常更方便）  
-4) 运行 `llm/train_grpo.py` 或 `llm/train_dapo.py` 做偏好/策略优化  
+1. Download the base model (or prepare a local model directory)
+2. Run `llm/train_sft.py` to train LoRA via SFT (teacher policy generates data)
+3. Use `tools/merge_lora.py` to merge LoRA into the base model and produce a merged model directory (optional, but GRPO/DAPO is usually more convenient this way)
+4. Run `llm/train_grpo.py` or `llm/train_dapo.py` for preference/policy optimization
 
-LoRA 合并示例：
+LoRA merge example:
 
 ```bash
 python tools/merge_lora.py --base_model models/Qwen2.5-7B-Instruct --adapter outputs/sft/<run>/final_sft_checkpoint --out models/merge7B_exbert
 ```
 
-## 运行（LLM 部分）
+## Running (LLM Part)
 
-这些脚本都支持通过环境变量覆盖路径（默认写到仓库下的 `data/` 与 `outputs/`）：
+All these scripts support overriding paths via environment variables (defaults write into `data/` and `outputs/` under the repo):
 
-- SFT：
-  - `SFT_MODEL_PATH`：基座模型路径
-  - `SFT_DATA_DIR`：SFT 数据输出目录
-  - `SFT_OUTPUT_DIR`：SFT 训练输出目录
+* SFT:
+
+  * `SFT_MODEL_PATH`: Base model path
+  * `SFT_DATA_DIR`: SFT data output directory
+  * `SFT_OUTPUT_DIR`: SFT training output directory
 
 ```bash
 python llm/train_sft.py
 ```
 
-- GRPO：
-  - `GRPO_MODEL_PATH`：基座/merged 模型路径
-  - `GRPO_DATA_ROOT`：GRPO 数据根目录
-  - `GRPO_OUTPUT_ROOT`：GRPO 输出根目录
-  - `USE_VLLM=1`：启用 vLLM（若未安装 vLLM 会自动回退为关闭）
+* GRPO:
+
+  * `GRPO_MODEL_PATH`: Base/merged model path
+  * `GRPO_DATA_ROOT`: GRPO data root directory
+  * `GRPO_OUTPUT_ROOT`: GRPO output root directory
+  * `USE_VLLM=1`: Enable vLLM (if vLLM is not installed, it will automatically fall back to disabled)
 
 ```bash
 python llm/train_grpo.py
 ```
 
-- DAPO：
-  - `DAPO_MODEL_PATH` / `DAPO_DATA_ROOT` / `DAPO_OUTPUT_ROOT` 同理
+* DAPO:
+
+  * `DAPO_MODEL_PATH` / `DAPO_DATA_ROOT` / `DAPO_OUTPUT_ROOT` are analogous
 
 ```bash
 python llm/train_dapo.py
 ```
 
-## 2 基站 / 5 基站：训练与超参数
+## 2 Base Stations / 5 Base Stations: Training and Hyperparameters
 
-本仓库的训练脚本里，**基站数/用户数等环境超参是写在脚本头部的全局常量**。目前默认值是：
+In this repo’s training scripts, **the number of base stations / number of users / and other environment hyperparameters are defined as global constants at the top of the scripts**. The current default values are:
 
-- `llm/train_sft.py`：默认 **B=2**（`NUM_BASE_STATIONS=2, NUM_USERS=20`）
-- `llm/train_grpo.py`：默认 **B=5**（`NUM_BASE_STATIONS=5, NUM_USERS=40`）
-- `llm/train_dapo.py`：默认 **B=2**（`NUM_BASE_STATIONS=2, NUM_USERS=20`）
-- `llm/evaluate_unified.py`：**用命令行参数**切换 B=2 / B=5
+* `llm/train_sft.py`: default **B=2** (`NUM_BASE_STATIONS=2, NUM_USERS=20`)
+* `llm/train_grpo.py`: default **B=5** (`NUM_BASE_STATIONS=5, NUM_USERS=40`)
+* `llm/train_dapo.py`: default **B=2** (`NUM_BASE_STATIONS=2, NUM_USERS=20`)
+* `llm/evaluate_unified.py`: switch B=2 / B=5 via **command-line arguments**
 
-下面把 **B=2** 和 **B=5** 的训练/评测流程、以及你需要的超参数都集中写一遍，照着做就能复现实验。
+Below is a consolidated write-up of the **B=2** and **B=5** training/evaluation workflow and the hyperparameters you need. Follow it as-is to reproduce the experiments.
 
-### 两基站（B=2）：训练
+### Two Base Stations (B=2): Training
 
-#### 1) SFT（教师策略数据 + LoRA SFT）
+#### 1) SFT (Teacher-Policy Data + LoRA SFT)
 
-脚本：`llm/train_sft.py`
+Script: `llm/train_sft.py`
 
-关键环境超参：
+Key environment hyperparameters:
 
-- `NUM_BASE_STATIONS=2`
-- `NUM_USERS=20`
-- `NUM_CONTENTS=100`
-- `CACHE_SIZES=[10,10]`
-- `ZIPF_PARAM=1.2`
-- `NUM_EPOCHS_DATA_SFT=3000`（SFT 数据量）
-- `MAX_SEQ_LENGTH=2048`
+* `NUM_BASE_STATIONS=2`
+* `NUM_USERS=20`
+* `NUM_CONTENTS=100`
+* `CACHE_SIZES=[10,10]`
+* `ZIPF_PARAM=1.2`
+* `NUM_EPOCHS_DATA_SFT=3000` (SFT data volume)
+* `MAX_SEQ_LENGTH=2048`
 
-运行：
+Run:
 
 ```bash
-# （可选）指定基座模型目录（HF 格式）；不设则默认 models/Qwen2.5-7B-Instruct
+# (Optional) Specify the base model directory (HF format); if not set, defaults to models/Qwen2.5-7B-Instruct
 export SFT_MODEL_PATH=models/Qwen2.5-7B-Instruct
 
 python llm/train_sft.py
 ```
 
-输出说明：
+Output notes:
 
-- SFT 数据：写入 `data/sft/`，文件名类似 `sft_data_no_cot_replacement_only_v1_nbs2_seed666.json`
-- SFT LoRA：写入 `outputs/sft/SFT_Qwen2_Cache_<时间戳>/final_sft_checkpoint/`
+* SFT data: written to `data/sft/`, filenames like `sft_data_no_cot_replacement_only_v1_nbs2_seed666.json`
+* SFT LoRA: written to `outputs/sft/SFT_Qwen2_Cache_<timestamp>/final_sft_checkpoint/`
 
-#### 2) 合并 SFT LoRA，得到 merged 模型（便于 GRPO/DAPO）
+#### 2) Merge SFT LoRA to Produce a Merged Model (Convenient for GRPO/DAPO)
 
 ```bash
 python tools/merge_lora.py \
   --base_model models/Qwen2.5-7B-Instruct \
-  --adapter outputs/sft/SFT_Qwen2_Cache_<时间戳>/final_sft_checkpoint \
+  --adapter outputs/sft/SFT_Qwen2_Cache_<timestamp>/final_sft_checkpoint \
   --out models/merge7B_exbert
 ```
 
-#### 3) GRPO（B=2 版）
+#### 3) GRPO (B=2 Version)
 
-**如果你要训练 B=2 的 GRPO**，请把 `llm/train_grpo.py` 文件头部的全局常量改成下面这套：
+**If you want to train GRPO with B=2**, change the global constants at the top of `llm/train_grpo.py` to the following:
 
 ```python
-# ===== B=2（两基站）GRPO 超参数 =====
+# ===== B=2 (Two Base Stations) GRPO Hyperparameters =====
 MAX_COMPLETION_LENGTH = 64
 MAX_PROMPT_LENGTH = 2048
 MAX_SEQ_LENGTH = MAX_PROMPT_LENGTH + MAX_COMPLETION_LENGTH
@@ -215,61 +222,61 @@ OPP_DISCOUNT_GAMMA = 0.9
 SLOT_INDEX_BASE = 0
 
 ANNEAL_ENABLED = bool(int(os.getenv("ANNEAL_ENABLED", "1")))
-ANNEAL_LOG_EVERY = int(os.getenv("ANNEAL_LOG_EVERY", "5"))
+ANNEAL_LOG_EVERY = int(os.getenv("ANNEAL_LOG_EVERY", "5")))
 ```
 
-然后运行：
+Then run:
 
 ```bash
-# （可选）关闭退火：ANNEAL_ENABLED=0；默认 ANNEAL_ENABLED=1 开启
+# (Optional) Disable annealing: ANNEAL_ENABLED=0; by default ANNEAL_ENABLED=1 enables it
 export ANNEAL_ENABLED=1
 export GRPO_MODEL_PATH=models/merge7B_exbert
 
 python llm/train_grpo.py
 ```
 
-输出说明：
+Output notes:
 
-- GRPO 数据：写入 `data/grpo/grpo_cache_data_<时间戳>/`
-- GRPO LoRA：写入 `outputs/grpo/grpo_cache_<时间戳>/final_lora_weights/`
+* GRPO data: written to `data/grpo/grpo_cache_data_<timestamp>/`
+* GRPO LoRA: written to `outputs/grpo/grpo_cache_<timestamp>/final_lora_weights/`
 
-#### 4)（可选）DAPO（B=2 版）
+#### 4) (Optional) DAPO (B=2 Version)
 
-脚本：`llm/train_dapo.py`（当前代码默认就是 B=2）
+Script: `llm/train_dapo.py` (current code defaults to B=2)
 
 ```bash
 export DAPO_MODEL_PATH=models/merge7B_exbert
 python llm/train_dapo.py
 ```
 
-### 五基站（B=5）：训练
+### Five Base Stations (B=5): Training
 
 #### 1) SFT
 
-**如果你要训练 B=5 的 SFT**，建议至少把以下常量改为：
+**If you want to train SFT with B=5**, it is recommended to at least change the following constants:
 
-- `NUM_BASE_STATIONS = 5`
-- `NUM_USERS = 40`
-- `CACHE_SIZES = [10,10,10,10,10]`
-- `MAX_SEQ_LENGTH = 4096`（B=5 prompt 更长；过小会被过滤掉很多样本）
+* `NUM_BASE_STATIONS = 5`
+* `NUM_USERS = 40`
+* `CACHE_SIZES = [10,10,10,10,10]`
+* `MAX_SEQ_LENGTH = 4096` (B=5 prompts are longer; if too small, many samples will be filtered out)
 
-改完后照常运行：
+After changes, run as usual:
 
 ```bash
 export SFT_MODEL_PATH=models/Qwen2.5-7B-Instruct
 python llm/train_sft.py
 ```
 
-#### 2) 合并 SFT LoRA
+#### 2) Merge SFT LoRA
 
-同上，得到 `models/merge7B_exbert`（或你自定义的 merged 目录），供 GRPO 使用。
+Same as above: produce `models/merge7B_exbert` (or a custom merged directory) for GRPO.
 
-#### 3) GRPO（B=5 版）
+#### 3) GRPO (B=5 Version)
 
-**如果你要训练 B=5 的 GRPO**，请把 `llm/train_grpo.py` 文件头部的全局常量改成下面这套：
+**If you want to train GRPO with B=5**, change the global constants at the top of `llm/train_grpo.py` to the following:
 
 ```python
-# ===== B=5（五基站）GRPO 超参数（与当前代码一致）=====
+# ===== B=5 (Five Base Stations) GRPO Hyperparameters (matches current code) =====
 MAX_COMPLETION_LENGTH = 128
 MAX_PROMPT_LENGTH = 4096
 MAX_SEQ_LENGTH = MAX_PROMPT_LENGTH + MAX_COMPLETION_LENGTH
@@ -332,78 +339,79 @@ OPP_DISCOUNT_GAMMA = 0.9
 SLOT_INDEX_BASE = 0
 
 ANNEAL_ENABLED = bool(int(os.getenv("ANNEAL_ENABLED", "1")))
-ANNEAL_LOG_EVERY = int(os.getenv("ANNEAL_LOG_EVERY", "5"))
+ANNEAL_LOG_EVERY = int(os.getenv("ANNEAL_LOG_EVERY", "5")))
 ```
 
-运行：
+Run:
 
 ```bash
 export GRPO_MODEL_PATH=models/merge7B_exbert
 python llm/train_grpo.py
 ```
 
-## 统一评估（2 基站 / 5 基站）
+## Unified Evaluation (2 Base Stations / 5 Base Stations)
 
-统一评估入口脚本：`llm/evaluate_unified.py`  
-它会在**同一份冻结的数据**（相同 requests & 连接关系）上评估多种策略，并把结果写成 JSON。
+Unified evaluation entry script: `llm/evaluate_unified.py`
+It evaluates multiple strategies on the **same frozen dataset** (same requests & connectivity) and writes results as JSON.
 
-常用参数：
-- `--num_base_stations`：基站数量（2 或 5）
-- `--cache_sizes`：每个基站 cache 大小（逗号分隔）。例如 `10,10` 或 `10,10,10,10,10`
-- `--num_contents`：内容数（默认 100）
-- `--num_users_list`：要测的用户数列表（逗号分隔）。例如只测 40 个用户就写 `40`
-- `--sac_ckpt`：SAC baseline 的 checkpoint（`.pt`）或目录（会自动选择 `sac_final.pt`/最新 step），默认指向 `sac_baseline_B5/sac_final.pt`
-- `--grpo_five_lora_dir` / `--grpo_ten_lora_dir`：如果你要一起评估 LLM（SFT/GRPO），需要给出 LoRA 目录
+Common arguments:
 
-输出位置：
-- 结果会写到 `outputs/evaluation_outputs/`（可用 `--output_dir` 覆盖）
-- 文件名会自动带上用户数量后缀，例如 `evaluation_results_users40.json`
+* `--num_base_stations`: number of base stations (2 or 5)
+* `--cache_sizes`: cache size per base station (comma-separated), e.g. `10,10` or `10,10,10,10,10`
+* `--num_contents`: number of contents (default 100)
+* `--num_users_list`: list of user counts to test (comma-separated), e.g. to test only 40 users use `40`
+* `--sac_ckpt`: SAC baseline checkpoint (`.pt`) or directory (auto-selects `sac_final.pt` / latest step); defaults to `sac_baseline_B5/sac_final.pt`
+* `--grpo_five_lora_dir` / `--grpo_ten_lora_dir`: if you want to evaluate LLMs (SFT/GRPO) together, provide the LoRA directories
 
-说明：
-- 当 `--num_base_stations > 2` 时，脚本会自动跳过 “单步穷举 / 三步 / 五步尾部NoOp” 这类穷举基线（因为组合数爆炸且原实现只对 2 基站有意义）。
-- 若本机未安装 `unsloth/transformers`，脚本会自动跳过 LLM 评估，仅评估 SAC + 启发式（LRU/LFU/FIFO）。
+Output location:
 
-### 测 2 个基站（B=2）
+* Results are written to `outputs/evaluation_outputs/` (can be overridden with `--output_dir`)
+* Filenames automatically include the user-count suffix, e.g. `evaluation_results_users40.json`
 
-1) 准备（可选）LLM：
-- `EVAL_MODEL_PATH` 指向你的 base/merged 模型目录（Hugging Face 格式）
-- `--grpo_five_lora_dir` / `--grpo_ten_lora_dir` 指向对应的 LoRA adapter 目录
+### Evaluate 2 Base Stations (B=2)
 
-2) 准备 SAC checkpoint（如果你要对比 SAC）：
-- 假设你的权重在 `sac_baseline_B2/sac_final.pt`（没有的话就用 `--sac_ckpt` 指定实际路径）
+1. Prepare (optional) LLM:
 
-3) 运行示例（只测 20 用户）：
+* `EVAL_MODEL_PATH` points to your base/merged model directory (Hugging Face format)
+* `--grpo_five_lora_dir` / `--grpo_ten_lora_dir` point to the corresponding LoRA adapter directories
+
+2. Prepare SAC checkpoint (if you want SAC comparison):
+
+* Suppose your weights are in `sac_baseline_B2/sac_final.pt` (if not, specify the actual path via `--sac_ckpt`)
+
+3. Run example (test only 20 users):
 
 ```bash
 python llm/evaluate_unified.py --output eval_b2.json --num_base_stations 2 --cache_sizes 10,10 --num_contents 100 --num_users_list 20 --sac_ckpt sac_baseline_B2/sac_final.pt
 ```
 
-### 测 5 个基站（B=5）
+### Evaluate 5 Base Stations (B=5)
 
-你当前已有的 SAC 权重目录：`sac_baseline_B5/`（包含 `sac_final.pt`、以及若干 `sac_step_*.pt`）
+Your existing SAC weights directory: `sac_baseline_B5/` (contains `sac_final.pt` and multiple `sac_step_*.pt`)
 
-运行示例（只测 40 用户）：
+Run example (test only 40 users):
 
 ```bash
 python llm/evaluate_unified.py --output eval_b5.json --num_base_stations 5 --cache_sizes 10,10,10,10,10 --num_contents 100 --num_users_list 40 --sac_ckpt sac_baseline_B5
 ```
 
-如果你也要同时评估 LLM（SFT/GRPO），在上面命令里追加：
-- `--grpo_five_lora_dir <你的GRPO_FIVE适配器目录>`
-- `--grpo_ten_lora_dir <你的GRPO_TEN适配器目录>`
+If you also want to evaluate LLM (SFT/GRPO) simultaneously, append to the above command:
 
-## LLM 动作格式
+* `--grpo_five_lora_dir <your GRPO_FIVE adapter directory>`
+* `--grpo_ten_lora_dir <your GRPO_TEN adapter directory>`
 
-LLM 的输出会被 `cache_env/action_validator.py` **严格解析**。默认只允许两类动作（每个基站一行）：
+## LLM Action Format
 
-- 替换：`基站X的决策是：用内容Y替换槽位Z中的内容W。`
-- 不操作：`基站X的决策是：不执行任何缓存操作。`
+LLM outputs are **strictly parsed** by `cache_env/action_validator.py`. By default, only two types of actions are allowed (one line per base station):
 
-如果输出格式不满足约束（行数不对、ID 越界、替换内容不来自当前请求等），该 sample 会被判为无效并走兜底逻辑。
+* Replace: `Base station X’s decision is: use content Y to replace content W in slot Z.`
+* No-op: `Base station X’s decision is: do not perform any caching operation.`
 
-## 运行（SAC baseline）
+If the output format does not satisfy constraints (wrong number of lines, out-of-range IDs, replacement content not from the current request, etc.), that sample is considered invalid and will use fallback logic.
 
-在 `baselines/sac_baseline/` 下按其 README 运行即可，例如：
+## Running (SAC Baseline)
+
+Run according to the README under `baselines/sac_baseline/`, for example:
 
 ```bash
 cd baselines/sac_baseline
