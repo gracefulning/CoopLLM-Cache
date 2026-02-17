@@ -1,0 +1,13 @@
+# Pinned versions for reproducibility.
+
+numpy==2.2.6
+pandas==2.3.2
+
+# SAC baseline environment
+gym==0.26.2
+
+# Core RL dependency
+torch==2.7.0
+
+# Logging
+tensorboard==2.20.0
