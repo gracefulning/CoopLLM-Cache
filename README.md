@@ -1,4 +1,4 @@
-# Communication Master
+# CoopLLM-Cache
 
 * **LLM Cache Policy Learning**: SFT / GRPO / DAPO (based on TRL + Unsloth)
 
@@ -353,6 +353,7 @@ python llm/train_grpo.py
 
 Unified evaluation entry script: `llm/evaluate_unified.py`
 It evaluates multiple strategies on the **same frozen dataset** (same requests & connectivity) and writes results as JSON.
+By default, evaluation uses greedy decoding.
 
 Common arguments:
 
@@ -362,6 +363,8 @@ Common arguments:
 * `--num_users_list`: list of user counts to test (comma-separated), e.g. to test only 40 users use `40`
 * `--sac_ckpt`: SAC baseline checkpoint (`.pt`) or directory (auto-selects `sac_final.pt` / latest step); defaults to `sac_baseline_B5/sac_final.pt`
 * `--grpo_five_lora_dir` / `--grpo_ten_lora_dir`: if you want to evaluate LLMs (SFT/GRPO) together, provide the LoRA directories
+* `--num_steps`: number of steps per evaluation (default 300)
+* `--num_seeds`: number of seeds to average (default 3)
 
 Output location:
 
