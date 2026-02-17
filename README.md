@@ -1,7 +1,6 @@
 # Communication Master
 
 - **LLM 缓存策略学习**：SFT / GRPO / DAPO（基于 TRL + Unsloth）
-- **SAC baseline**：联合 computing / pushing / caching（位于 `baselines/sac_baseline/`）
 
 ## 目录结构
 
