@@ -1,6 +1,0 @@
-# Install all dependencies for:
-# - LLM trainers (SFT / GRPO / DAPO) + cache environment
-# - SAC baseline
--r requirements-llm.txt
--r requirements-sac.txt
-
