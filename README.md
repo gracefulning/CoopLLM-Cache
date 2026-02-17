@@ -28,7 +28,7 @@
 
 ## Environment Setup
 
-Recommended: Linux + NVIDIA GPU (Unsloth / bitsandbytes / vLLM are mostly only available on Linux in many cases).
+Recommended: Linux + NVIDIA GPU.
 
 ```bash
 pip install -r requirements.txt
