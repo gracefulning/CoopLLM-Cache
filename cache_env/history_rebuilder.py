@@ -5,7 +5,7 @@ from typing import Set, Dict, List, Tuple
 from cache_env.unified_multi_bs_cache_env import UnifiedMultiBSCacheEnv
 
 # =================================================================
-# === 穷举-前瞻命中率教师（未来5步） ==================================
+# === 穷举-前瞻命中率教师（未来10步） ==================================
 # =================================================================
 
 LOOKAHEAD_HORIZON = 10  # 未来步数（固定为10步）
@@ -64,7 +64,7 @@ def _enumerate_candidate_actions(
     actions = sorted(set(actions))
     return actions
 
-# ---------------------- 评分：未来5步真实命中率（静态缓存） -------------------
+# ---------------------- 评分：未来10步真实命中率（静态缓存） -------------------
 def _score_action_by_lookahead_network_hit_rate(
     env: UnifiedMultiBSCacheEnv,
     caches_snapshot: List[List[int]],
