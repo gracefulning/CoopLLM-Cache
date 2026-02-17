@@ -104,7 +104,7 @@ ANNEAL_TOP_P_END   = 0.85
 TOP_K              = 50
 REPETITION_PENALTY = 1.0
 
-# 采样评估默认超参（pass4 共用）
+# 采样评估默认超参（可选）
 SAMPLE_TEMPERATURE = 0.90
 SAMPLE_TOP_P       = 0.95
 SAMPLE_TOP_K       = TOP_K
@@ -120,13 +120,16 @@ GRPO_TEN_LORA_DIR_DEFAULT  = "/root/autodl-tmp/grpo_cache_project_deeprl_multi/o
 SAC_CKPT_DEFAULT = os.path.join(PROJECT_ROOT, "sac_baseline_B5", "sac_final.pt")
 
 # =========================
-# 评估策略及超参（支持贪婪与 pass4 采样）
+# 评估策略及超参（默认贪婪，可选采样）
 # =========================
 NUM_EVALUATION_START_POINTS = 1
-NUM_SIMULATION_STEPS        = 20
+NUM_SIMULATION_STEPS        = 300
 
-# 解码模式集合：总是同时评估这两种
-DECODE_CHOICES = ["greedy", "sample_pass4"]
+# 前缀平均命中率统计点
+PREFIX_AVG_STEPS = [50, 100, 150, 200, 250, 300]
+
+# 解码模式集合：默认只评估 greedy（可选加入采样）
+DECODE_CHOICES = ["greedy"]
 
 # 穷举安全阈值
 MAX_JOINT_COMBOS_PER_STEP = 10000000000
@@ -167,7 +170,7 @@ def _build_greedy_gen_config(tokenizer, eos_ids):
     return gen_cfg
 
 def _build_sample_gen_config(tokenizer, eos_ids):
-    """用于 pass4 的采样配置。"""
+    """用于可选采样的配置。"""
     gen_cfg = GenerationConfig(
         do_sample=True,
         num_beams=1,
@@ -194,6 +197,16 @@ def convert_numpy_to_python(data: Any) -> Any:
     if isinstance(data, np.ndarray):
         return data.tolist()
     return data
+
+def _compute_prefix_avg(hit_rates: List[float], prefix_steps: List[int]) -> Dict[str, float]:
+    """计算前缀平均命中率（按指定步数）。"""
+    res: Dict[str, float] = {}
+    if not hit_rates:
+        return res
+    for t in prefix_steps:
+        if len(hit_rates) >= t:
+            res[str(t)] = float(np.mean(hit_rates[:t]))
+    return res
 
 # 允许选择是否重置频率（默认 False，避免每种策略的底层数据不同）
 def _initialize_env_for_sample(env: UnifiedMultiBSCacheEnv, initial_epoch_id: int,
@@ -679,6 +692,7 @@ def run_evaluation(
     results = {"agent_type": agent_type, "evaluations": []}
     all_hit_rates: List[float] = []
     decision_times_ms: List[float] = []
+    prefix_per_episode: List[Dict[str, float]] = []
 
     # 若提供 adapter_name，则切换
     if adapter_name and model is not None and hasattr(model, "set_adapter"):
@@ -866,9 +880,23 @@ def run_evaluation(
             if done:
                 break
 
+        prefix_avg = _compute_prefix_avg(episode_log["hit_rates"], PREFIX_AVG_STEPS)
+        episode_log["prefix_avg_hit_rate"] = prefix_avg
+        prefix_per_episode.append(prefix_avg)
         results["evaluations"].append(episode_log)
 
     results["overall_avg_hit_rate"] = float(np.mean(all_hit_rates)) if all_hit_rates else 0.0
+    # 计算前缀平均（跨多个起点取均值/标准差）
+    prefix_mean: Dict[str, float] = {}
+    prefix_std: Dict[str, float] = {}
+    for t in PREFIX_AVG_STEPS:
+        key = str(t)
+        vals = [p[key] for p in prefix_per_episode if key in p]
+        if vals:
+            prefix_mean[key] = float(np.mean(vals))
+            prefix_std[key] = float(np.std(vals, ddof=0))
+    results["prefix_avg_hit_rate"] = prefix_mean
+    results["prefix_avg_hit_rate_std"] = prefix_std
     results["avg_decision_time_per_step_ms"] = float(np.mean(decision_times_ms)) if decision_times_ms else 0.0
     results["num_decisions"] = int(len(decision_times_ms))
     _logger.info(
@@ -883,12 +911,13 @@ def run_evaluation(
 def main():
     global NUM_BASE_STATIONS, NUM_CONTENTS, CACHE_SIZES, ZIPF_PARAM, NUM_USERS_LIST_TO_TEST, OUTPUT_DIR
     parser = argparse.ArgumentParser(
-        description="统一缓存策略评估（SFT/GRPO/DAPO LLM + SAC baseline + 启发式；LLM 同时评估 greedy/pass4）"
+        description="统一缓存策略评估（SFT/GRPO/DAPO LLM + SAC baseline + 启发式；LLM 默认 greedy，可选采样）"
     )
     parser.add_argument("--output", type=str, default="evaluation_results.json", help="输出文件名")
     parser.add_argument("--output_dir", type=str, default=OUTPUT_DIR, help="评估结果输出目录")
     parser.add_argument("--num_points", type=int, default=NUM_EVALUATION_START_POINTS, help="评估起点数量")
     parser.add_argument("--num_steps", type=int, default=NUM_SIMULATION_STEPS, help="每个评估的步数")
+    parser.add_argument("--include_pass4", action="store_true", help="可选：加入采样评估（4 次采样择优）")
     parser.add_argument("--num_base_stations", type=int, default=NUM_BASE_STATIONS, help="基站数量（如 2 或 5）")
     parser.add_argument("--cache_sizes", type=str, default="", help="每个基站 cache 大小，用逗号分隔；为空则全部默认=10")
     parser.add_argument("--num_contents", type=int, default=NUM_CONTENTS, help="内容总数")
@@ -897,7 +926,7 @@ def main():
     parser.add_argument("--grpo_five_lora_dir", type=str, default=GRPO_FIVE_LORA_DIR_DEFAULT, help="GRPO_FIVE LoRA 目录（包含 adapter）")
     parser.add_argument("--grpo_ten_lora_dir", type=str, default=GRPO_TEN_LORA_DIR_DEFAULT, help="GRPO_TEN LoRA 目录（包含 adapter）")
     parser.add_argument("--sac_ckpt", type=str, default=SAC_CKPT_DEFAULT, help="SAC checkpoint 路径（.pt）")
-    parser.add_argument("--num_seeds", type=int, default=1, help="多次评估的种子数量并取平均（默认10）")
+    parser.add_argument("--num_seeds", type=int, default=3, help="多次评估的种子数量并取平均（默认3）")
     parser.add_argument("--seed_base", type=int, default=GRPO_DATA_SEED, help="数据生成起始种子（将顺延 num_seeds 次）")
     args = parser.parse_args()
 
@@ -931,8 +960,10 @@ def main():
         raise ValueError("--num_users_list 不能为空")
     NUM_USERS_LIST_TO_TEST = [int(x) for x in parsed_users_list]
 
-    # 总是一起评估两种解码模式
-    decode_modes = DECODE_CHOICES
+    # 默认只评估 greedy；可选加入采样
+    decode_modes = list(DECODE_CHOICES)
+    if args.include_pass4 and "sample_pass4" not in decode_modes:
+        decode_modes.append("sample_pass4")
     _logger.info(f"本次 LLM 解码模式集合：{decode_modes}")
     _logger.info(f"评估配置：BS={NUM_BASE_STATIONS}, cache_sizes={CACHE_SIZES}, contents={NUM_CONTENTS}, zipf={ZIPF_PARAM}, users_list={NUM_USERS_LIST_TO_TEST}")
 
@@ -1191,6 +1222,7 @@ def main():
         # ===== 聚合：按策略计算 mean / std（overall_avg_hit_rate 与 avg_decision_time_per_step_ms）=====
         agg_rate_map: Dict[str, List[float]] = {}
         agg_time_map: Dict[str, List[float]] = {}
+        agg_prefix_map: Dict[str, Dict[str, List[float]]] = {}
 
         for seed_pack in per_seed_results:
             for res in seed_pack["results"]:
@@ -1199,6 +1231,10 @@ def main():
                 tavg = float(res.get("avg_decision_time_per_step_ms", 0.0))
                 agg_rate_map.setdefault(name, []).append(rate)
                 agg_time_map.setdefault(name, []).append(tavg)
+                prefix_map = res.get("prefix_avg_hit_rate", {})
+                if isinstance(prefix_map, dict):
+                    for step_str, val in prefix_map.items():
+                        agg_prefix_map.setdefault(name, {}).setdefault(step_str, []).append(float(val))
 
         aggregate = []
         for name in sorted(set(list(agg_rate_map.keys()) + list(agg_time_map.keys()))):
@@ -1208,12 +1244,22 @@ def main():
             std_v  = float(np.std(rates, ddof=0)) if rates else 0.0
             mean_t = float(np.mean(times)) if times else 0.0
             std_t  = float(np.std(times, ddof=0)) if times else 0.0
+            prefix_mean: Dict[str, float] = {}
+            prefix_std: Dict[str, float] = {}
+            step_map = agg_prefix_map.get(name, {})
+            for step_str, vals in step_map.items():
+                if vals:
+                    prefix_mean[step_str] = float(np.mean(vals))
+                    prefix_std[step_str] = float(np.std(vals, ddof=0))
+
             aggregate.append({
                 "strategy_name": name,
                 "mean_overall_avg_hit_rate": mean_v,
                 "std_overall_avg_hit_rate": std_v,
                 "mean_decision_time_ms": mean_t,
                 "std_decision_time_ms": std_t,
+                "prefix_avg_hit_rate_mean": convert_numpy_to_python(prefix_mean),
+                "prefix_avg_hit_rate_std": convert_numpy_to_python(prefix_std),
                 "rates": convert_numpy_to_python(rates),
                 "avg_times_ms": convert_numpy_to_python(times),
             })
