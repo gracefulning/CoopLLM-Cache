@@ -49,7 +49,7 @@ pip install -r requirements.txt
 - `tensorboard` / `wandb`：训练日志
 - `gym`：`baselines/sac_baseline` 环境接口
 
-## 下载模型（可选）
+## 下载模型
 
 ```bash
 python tools/download_hf_model.py --repo_id Qwen/Qwen2.5-7B-Instruct --out models/Qwen2.5-7B-Instruct
@@ -98,9 +98,9 @@ python llm/train_grpo.py
 python llm/train_dapo.py
 ```
 
-## 2 基站 / 5 基站：训练与超参数（写清楚版）
+## 2 基站 / 5 基站：训练与超参数
 
-本仓库的训练脚本里，**基站数/用户数等环境超参是写在脚本头部的全局常量**（不是命令行参数）。目前默认值是：
+本仓库的训练脚本里，**基站数/用户数等环境超参是写在脚本头部的全局常量**。目前默认值是：
 
 - `llm/train_sft.py`：默认 **B=2**（`NUM_BASE_STATIONS=2, NUM_USERS=20`）
 - `llm/train_grpo.py`：默认 **B=5**（`NUM_BASE_STATIONS=5, NUM_USERS=40`）
@@ -113,9 +113,9 @@ python llm/train_dapo.py
 
 #### 1) SFT（教师策略数据 + LoRA SFT）
 
-脚本：`llm/train_sft.py`（当前代码默认就是 B=2）
+脚本：`llm/train_sft.py`
 
-关键环境超参（来自 `llm/train_sft.py` 当前默认值）：
+关键环境超参：
 
 - `NUM_BASE_STATIONS=2`
 - `NUM_USERS=20`
@@ -150,7 +150,7 @@ python tools/merge_lora.py \
 
 #### 3) GRPO（B=2 版）
 
-说明：`llm/train_grpo.py` 当前默认是 B=5。**如果你要训练 B=2 的 GRPO**，请把 `llm/train_grpo.py` 文件头部的全局常量改成下面这套（就是你截图里那套）：
+**如果你要训练 B=2 的 GRPO**，请把 `llm/train_grpo.py` 文件头部的全局常量改成下面这套：
 
 ```python
 # ===== B=2（两基站）GRPO 超参数 =====
@@ -245,9 +245,9 @@ python llm/train_dapo.py
 
 ### 五基站（B=5）：训练
 
-#### 1) SFT（建议也按 B=5 生成教师数据并训练）
+#### 1) SFT
 
-说明：`llm/train_sft.py` 当前默认是 B=2。**如果你要训练 B=5 的 SFT**，建议至少把以下常量改为：
+**如果你要训练 B=5 的 SFT**，建议至少把以下常量改为：
 
 - `NUM_BASE_STATIONS = 5`
 - `NUM_USERS = 40`
@@ -261,13 +261,13 @@ export SFT_MODEL_PATH=models/Qwen2.5-7B-Instruct
 python llm/train_sft.py
 ```
 
-#### 2)（可选）合并 SFT LoRA
+#### 2) 合并 SFT LoRA
 
 同上，得到 `models/merge7B_exbert`（或你自定义的 merged 目录），供 GRPO 使用。
 
-#### 3) GRPO（B=5 版，当前代码默认就是这套）
+#### 3) GRPO（B=5 版）
 
-`llm/train_grpo.py` 当前默认就是 B=5，超参数以代码为准。为了方便核对，这里把关键超参列出来（与 `llm/train_grpo.py` 当前一致）：
+**如果你要训练 B=5 的 GRPO**，请把 `llm/train_grpo.py` 文件头部的全局常量改成下面这套：
 
 ```python
 # ===== B=5（五基站）GRPO 超参数（与当前代码一致）=====
@@ -373,7 +373,7 @@ python llm/train_grpo.py
 2) 准备 SAC checkpoint（如果你要对比 SAC）：
 - 假设你的权重在 `sac_baseline_B2/sac_final.pt`（没有的话就用 `--sac_ckpt` 指定实际路径）
 
-3) 运行示例（只测 20 用户，与你的 B=2 训练配置一致）：
+3) 运行示例（只测 20 用户）：
 
 ```bash
 python llm/evaluate_unified.py --output eval_b2.json --num_base_stations 2 --cache_sizes 10,10 --num_contents 100 --num_users_list 20 --sac_ckpt sac_baseline_B2/sac_final.pt
