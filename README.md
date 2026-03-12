@@ -420,3 +420,25 @@ Run according to the README under `baselines/sac_baseline/`, for example:
 cd baselines/sac_baseline
 python main.py --automatic_entropy_tuning True --target_update_interval 1000 --lr 1e-4 --exp-case case3 --cuda
 ```
+
+## Publications / Citations
+
+If you find our research helpful, please consider citing the following papers:
+
+### 1. Cooperative Edge Caching with LLM
+> **Cooperative Edge Caching with Large Language Model in Wireless Networks.** > Ning Yang, Wentao Wang, Lingtao Ouyang, and Haijun Zhang. *arXiv preprint arXiv:2602.13307*, 2026.  
+> [[Paper]](https://arxiv.org/abs/2602.13307)
+
+<details>
+<summary>Click to expand BibTeX</summary>
+
+```bibtex
+@misc{yang2026cooperative,
+      title  = {Cooperative Edge Caching with Large Language Model in Wireless Networks}, 
+      author = {Ning Yang and Wentao Wang and Lingtao Ouyang and Haijun Zhang},
+      year   = {2026},
+      eprint = {2602.13307},
+      archivePrefix = {arXiv},
+      primaryClass  = {cs.NI},
+      url    = {[https://arxiv.org/abs/2602.13307](https://arxiv.org/abs/2602.13307)}
+}
